@@ -1,0 +1,10 @@
+{
+  "module": "github.com/ecko-lang/geo",
+  "version": "0.9.5",
+  "entrypoint": "main.ecko",
+  "description": "Geospatial basics: geohash encode/decode, great-circle distance and bearing, bounding boxes. Pure - no capabilities.",
+  "author": "Sean Nieuwoudt <sean@underwulf.com>",
+  "license": "MIT",
+  "capabilities": [],
+  "dependencies": {}
+}

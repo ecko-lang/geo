@@ -1,0 +1,128 @@
+# Tests for the geo package - offline, deterministic (no ai/fs/net).
+#
+# The geohash cases are the canonical published ones, and the distances are
+# values that can be derived exactly from the sphere rather than read off this
+# implementation: a degree of longitude at the equator, and half a great circle.
+import std.test
+import "../main.ecko"
+g = main
+
+fn close(actual, expected, tolerance) {
+    diff = actual - expected
+    if diff < 0.0 { 0.0 - diff <= tolerance } else { diff <= tolerance }
+}
+
+# --- geohash ------------------------------------------------------------------
+
+test.case("encode reproduces the canonical geohash example", fn() {
+    # The example every geohash reference uses.
+    test.eq(g.encode(57.64911, 10.40744, 11), "u4pruydqqvj")
+})
+
+test.case("encode honours the requested precision", fn() {
+    test.eq(g.encode(57.64911, 10.40744, 5), "u4pru")
+    test.eq(g.encode(57.64911, 10.40744, 1), "u")
+    test.eq(len(g.encode(0.0, 0.0, 9)), 9)
+})
+
+test.case("decode lands inside the cell it came from", fn() {
+    p = g.decode("ezs42")
+    test.ok(close(p.lat, 42.605, 0.03), "lat {p.lat}")
+    test.ok(close(p.lon, -5.603, 0.03), "lon {p.lon}")
+})
+
+test.case("decode_bbox gives the cell bounds", fn() {
+    b = g.decode_bbox("ezs42")
+    test.ok(close(b.min_lat, 42.583, 0.01), "min_lat {b.min_lat}")
+    test.ok(close(b.max_lat, 42.627, 0.01), "max_lat {b.max_lat}")
+    test.ok(close(b.min_lon, -5.625, 0.01), "min_lon {b.min_lon}")
+    test.ok(close(b.max_lon, -5.581, 0.01), "max_lon {b.max_lon}")
+})
+
+test.case("encode then decode round-trips within the cell size", fn() {
+    for pair in [[51.5074, -0.1278], [-33.9249, 18.4241], [0.0, 0.0], [-90.0, -180.0]] {
+        h = g.encode(pair[0], pair[1], 12)
+        p = g.decode(h)
+        test.ok(close(p.lat, pair[0], 0.0001), "lat round-trip for {pair}: {p.lat}")
+        test.ok(close(p.lon, pair[1], 0.0001), "lon round-trip for {pair}: {p.lon}")
+    }
+})
+
+test.case("a longer hash is a prefix-extension of a shorter one", fn() {
+    # This is the property the whole scheme exists for: shared prefix means
+    # spatial proximity, so a prefix search is a bounding-box search.
+    long = g.encode(57.64911, 10.40744, 11)
+    for n in 1..11 {
+        test.eq(g.encode(57.64911, 10.40744, n), join(take(chars(long), n), ""))
+    }
+})
+
+test.case("an out-of-range coordinate is rejected", fn() {
+    test.eq(try { g.encode(91.0, 0.0, 5) } catch (e) { get(e, "kind") }, "geo")
+    test.eq(try { g.encode(0.0, 181.0, 5) } catch (e) { get(e, "kind") }, "geo")
+    test.eq(try { g.decode("a") } catch (e) { get(e, "kind") }, "geo")
+})
+
+# --- distance -----------------------------------------------------------------
+
+test.case("distance matches values derivable from the sphere", fn() {
+    # One degree of longitude at the equator is 2*pi*R/360.
+    one_degree = 2.0 * 3.141592653589793 * 6371008.8 / 360.0
+    test.ok(close(g.distance(0.0, 0.0, 0.0, 1.0), one_degree, 1.0), "1 deg lon at equator")
+    # One degree of latitude is the same on a sphere.
+    test.ok(close(g.distance(0.0, 0.0, 1.0, 0.0), one_degree, 1.0), "1 deg lat")
+    # Half a great circle.
+    test.ok(
+        close(g.distance(0.0, 0.0, 0.0, 180.0), 3.141592653589793 * 6371008.8, 1.0),
+        "antipodal",
+    )
+    test.eq(g.distance(10.0, 20.0, 10.0, 20.0), 0.0)
+})
+
+test.case("distance is symmetric", fn() {
+    a = g.distance(51.5074, -0.1278, 48.8566, 2.3522)
+    b = g.distance(48.8566, 2.3522, 51.5074, -0.1278)
+    test.ok(close(a, b, 0.000001), "symmetric")
+    # London to Paris is about 344 km.
+    test.ok(close(a, 343500.0, 2000.0), "London-Paris {a}")
+})
+
+test.case("km is a convenience over distance", fn() {
+    test.ok(close(g.km(51.5074, -0.1278, 48.8566, 2.3522), 343.5, 2.0), "London-Paris in km")
+})
+
+# --- bearing and destination ---------------------------------------------------
+
+test.case("bearing points the right way for the cardinal cases", fn() {
+    test.ok(close(g.bearing(0.0, 0.0, 1.0, 0.0), 0.0, 0.01), "due north")
+    test.ok(close(g.bearing(0.0, 0.0, 0.0, 1.0), 90.0, 0.01), "due east")
+    test.ok(close(g.bearing(1.0, 0.0, 0.0, 0.0), 180.0, 0.01), "due south")
+    test.ok(close(g.bearing(0.0, 1.0, 0.0, 0.0), 270.0, 0.01), "due west")
+})
+
+test.case("destination and distance are inverses", fn() {
+    start = [51.5074, -0.1278]
+    d = g.destination(start[0], start[1], 45.0, 10000.0)
+    test.ok(close(g.distance(start[0], start[1], d.lat, d.lon), 10000.0, 1.0), "10 km away")
+    test.ok(close(g.bearing(start[0], start[1], d.lat, d.lon), 45.0, 0.01), "on the given bearing")
+})
+
+# --- bounding boxes ------------------------------------------------------------
+
+test.case("bbox brackets a radius and contains its centre", fn() {
+    b = g.bbox(51.5074, -0.1278, 5000.0)
+    test.ok(g.within(51.5074, -0.1278, b), "the centre is inside")
+    test.ok(b.min_lat < 51.5074 and b.max_lat > 51.5074, "latitude brackets")
+    test.ok(b.min_lon < -0.1278 and b.max_lon > -0.1278, "longitude brackets")
+    # A point just beyond the radius due north must fall outside.
+    far = g.destination(51.5074, -0.1278, 0.0, 6000.0)
+    test.ok(g.within(far.lat, far.lon, b) == false, "6 km north is outside a 5 km box")
+})
+
+test.case("within handles the box edges inclusively", fn() {
+    b = { min_lat: 0.0, max_lat: 1.0, min_lon: 0.0, max_lon: 1.0 }
+    test.ok(g.within(0.0, 0.0, b), "corner")
+    test.ok(g.within(1.0, 1.0, b), "far corner")
+    test.ok(g.within(0.5, 0.5, b), "middle")
+    test.ok(g.within(1.5, 0.5, b) == false, "outside")
+})
