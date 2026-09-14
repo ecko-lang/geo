@@ -16,19 +16,19 @@
 import std.math
 
 ## The IUGG mean Earth radius, in metres.
-export fn earth_radius() = 6371008.8
+fn earth_radius() = 6371008.8
 
 ## The geohash alphabet: base 32, with a, i, l and o omitted so the encoding
 ## cannot produce a character that is easily misread.
-export fn alphabet() = "0123456789bcdefghjkmnpqrstuvwxyz"
+fn alphabet() = "0123456789bcdefghjkmnpqrstuvwxyz"
 
 ## The error raised for coordinates or hashes that are not valid.
-export fn fail(message) {
+fn fail(message) {
     error({ kind: "geo", message: message })
 }
 
 ## Reject coordinates outside the range the projection is defined on.
-export fn check_coords(lat, lon) {
+fn check_coords(lat, lon) {
     if lat < -90.0 or lat > 90.0 { fail("latitude {lat} is outside -90..90") }
     if lon < -180.0 or lon > 180.0 { fail("longitude {lon} is outside -180..180") }
 }
@@ -150,7 +150,7 @@ export fn bearing(lat1, lon1, lat2, lon2) {
 }
 
 ## `value` wrapped into 0..limit, for a value that may be negative.
-export fn mod_positive(value, limit) {
+fn mod_positive(value, limit) {
     r = value - limit * float(floor(value / limit))
     if r < 0.0 { r + limit } else { r }
 }
@@ -192,7 +192,7 @@ export fn bbox(lat, lon, metres) {
 }
 
 ## `value` held within `lo`..`hi`.
-export fn clamp(value, lo, hi) {
+fn clamp(value, lo, hi) {
     if value < lo { return lo }
     if value > hi { return hi }
     value
