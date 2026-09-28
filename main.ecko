@@ -88,7 +88,7 @@ export fn decode_bbox(hash) {
         if idx < 0 { fail("'{c}' is not a geohash character") }
         # Five bits per character, most significant first.
         for shift in [16, 8, 4, 2, 1] {
-            on = idx / shift % 2 == 1
+            on = idx // shift % 2 == 1
             if even {
                 mid = (lon_lo + lon_hi) / 2.0
                 if on { lon_lo = mid } else { lon_hi = mid }
