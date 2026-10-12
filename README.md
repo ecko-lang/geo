@@ -22,7 +22,7 @@ geo.encode(57.64911, 10.40744, 11)   # "u4pruydqqvj"
 geo.decode("ezs42")                  # { lat: 42.605, lon: -5.603 }
 geo.decode_bbox("ezs42")             # the cell, not just its centre
 
-geo.km(51.5074, -0.1278, 48.8566, 2.3522)      # 343.5 - London to Paris
+geo.km(51.5074, -0.1278, 48.8566, 2.3522)      # 343.56 - London to Paris
 geo.bearing(51.5074, -0.1278, 48.8566, 2.3522) # 148 degrees
 geo.destination(51.5074, -0.1278, 90.0, 100000.0)
 
