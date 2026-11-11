@@ -121,3 +121,65 @@ test.case("within handles the box edges inclusively", fn() {
     test.ok(g.within(0.5, 0.5, b), "middle")
     test.ok(g.within(1.5, 0.5, b) == false, "outside")
 })
+
+fn kind_reason(f) = try {
+    f()
+    null
+} catch (e) { "{get(e, "kind")}/{get(e, "reason")}" }
+
+# Every point `metres` away, at bearings every 5 degrees, must fall in the box.
+fn ring_inside(lat, lon, metres) {
+    box = g.bbox(lat, lon, metres)
+    mut ok = true
+    for b in 0..72 {
+        p = g.destination(lat, lon, float(b * 5), metres * 0.999)
+        unless g.within(p.lat, p.lon, box) { ok = false }
+    }
+    ok
+}
+
+test.case("bbox across the antimeridian contains the nearby point on the other side", fn() {
+    box = g.bbox(0.0, 179.99, 50000.0)
+    test.ok(g.within(0.0, -179.99, box), "2 km away across the antimeridian")
+    test.ok(g.within(0.0, 179.9, box), "same side")
+    test.ok(not g.within(0.0, 0.0, box), "the far side of the world is outside")
+    test.ok(ring_inside(0.0, 179.99, 50000.0), "every point on the circle")
+    test.ok(ring_inside(10.0, -179.8, 80000.0), "west side")
+})
+
+test.case("bbox contains the whole circle at high latitude and over a pole", fn() {
+    test.ok(ring_inside(80.0, 20.0, 500000.0), "80N, 500 km")
+    test.ok(ring_inside(-75.0, -120.0, 900000.0), "75S, 900 km")
+    box = g.bbox(89.5, 0.0, 100000.0)
+    test.eq(box.max_lat, 90.0)
+    test.eq([box.min_lon, box.max_lon], [-180.0, 180.0])
+})
+
+test.case("center of an antimeridian box is on the antimeridian side", fn() {
+    c = g.center(g.bbox(0.0, 179.99, 50000.0))
+    test.ok(abs(abs(c.lon) - 179.99) < 0.001, "lon {c.lon}")
+})
+
+test.case("bbox refuses a negative radius", fn() {
+    test.eq(kind_reason(fn() g.bbox(0.0, 0.0, -5000.0)), "bug/bad_argument")
+})
+
+test.case("encode refuses a non-Int precision", fn() {
+    test.eq(kind_reason(fn() g.encode(0.0, 0.0, 1.5)), "bug/bad_argument")
+    test.eq(kind_reason(fn() g.encode(0.0, 0.0, 0)), "bug/bad_argument")
+})
+
+test.case("decode reads upper-case geohashes", fn() {
+    test.eq(g.decode("EZS42"), g.decode("ezs42"))
+    test.eq(kind_reason(fn() g.decode("ezs4a")), "geo/bad_geohash")
+})
+
+test.case("within and center refuse a map that is not a box", fn() {
+    test.eq(kind_reason(fn() g.within(0.0, 0.0, {})), "bug/bad_argument")
+    test.eq(kind_reason(fn() g.center({ lat: 1 })), "bug/bad_argument")
+})
+
+test.case("bad coordinates carry a reason", fn() {
+    test.eq(kind_reason(fn() g.distance(91.0, 0.0, 0.0, 0.0)), "geo/bad_coordinate")
+    test.eq(kind_reason(fn() g.distance("x", 0.0, 0.0, 0.0)), "bug/bad_argument")
+})
